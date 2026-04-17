@@ -15,9 +15,22 @@ using EcommerceWepApi.API.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ✅ Railway PORT
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+
 // ========== 1. Database ==========
+// ✅ SQLite مع مسار ثابت للـ Volume على Railway
+var dbPath = Environment.GetEnvironmentVariable("DB_PATH")
+    ?? Path.Combine(Directory.GetCurrentDirectory(), "app_data");
+
+Directory.CreateDirectory(dbPath);
+
+var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
+    ?? $"Data Source={Path.Combine(dbPath, "ecommerce.db")}";
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlite(connectionString));
 
 // ========== 2. Repositories & UnitOfWork ==========
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
@@ -40,6 +53,14 @@ builder.Services.AddScoped<IAdminLogService, AdminLogService>();
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 
 // ========== 5. JWT Authentication ==========
+// ✅ اقرأ من Environment Variables أولاً ثم من appsettings
+var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
+    ?? builder.Configuration["JWT:Secret"]!;
+var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER")
+    ?? builder.Configuration["JWT:Issuer"]!;
+var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
+    ?? builder.Configuration["JWT:Audience"]!;
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -53,10 +74,10 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["JWT:Issuer"],
-        ValidAudience = builder.Configuration["JWT:Audience"],
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
         IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"]!)),
+            Encoding.UTF8.GetBytes(jwtSecret)),
         ClockSkew = TimeSpan.Zero
     };
 
@@ -105,7 +126,6 @@ builder.Services.AddSwaggerGen(options =>
         Description = "واجهة برمجة تطبيقات المتجر الإلكتروني"
     });
 
-    // إعدادات JWT في Swagger
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -137,24 +157,32 @@ builder.Services.AddMemoryCache();
 
 var app = builder.Build();
 
+// ========== ✅ Auto Migration ==========
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    db.Database.Migrate();
+}
+
 // ========== Middleware Pipeline ==========
 
-// معالج الأخطاء العام
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// Swagger
-if (app.Environment.IsDevelopment())
+// ✅ Swagger شغال دايماً (Production و Development)
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "E-Commerce API v1");
-    });
-}
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "E-Commerce API v1");
+});
+
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
+// ✅ شيل HTTPS Redirection على Railway (Railway بيتكفل بيها)
+if (!app.Environment.IsProduction())
+{
+    app.UseHttpsRedirection();
+}
 
-app.UseHttpsRedirection();
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();

@@ -1,0 +1,11 @@
+**/.vs
+**/bin
+**/obj
+**/.git
+**/.gitignore
+**/.vscode
+*.md
+*.db
+*.db-shm
+*.db-wal
+app_data/
