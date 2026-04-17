@@ -3,7 +3,7 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
 # Copy solution and project files
-COPY ["EcommerceWebApi.sln", "."]
+COPY ["EcommerceWepApi.sln", "."]
 COPY ["EcommerceWepApi.API/EcommerceWepApi.API.csproj", "EcommerceWepApi.API/"]
 COPY ["EcommerceWepApi.BLL/EcommerceWepApi.BLL.csproj", "EcommerceWepApi.BLL/"]
 COPY ["EcommerceWepApi.DAL/EcommerceWepApi.DAL.csproj", "EcommerceWepApi.DAL/"]
