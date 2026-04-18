@@ -26,11 +26,10 @@ var dbPath = Environment.GetEnvironmentVariable("DB_PATH")
 
 Directory.CreateDirectory(dbPath);
 
-var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
-    ?? $"Data Source={Path.Combine(dbPath, "ecommerce.db")}";
+var connectionString = builder.Configuration.GetConnectionString("LocalConnection");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(connectionString));
+    options.UseSqlServer(connectionString)); // ✅ استخدم LocalConnection من appsettings.json
 
 // ========== 2. Repositories & UnitOfWork ==========
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
@@ -123,7 +122,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "E-Commerce API",
         Version = "v1",
-        Description = "واجهة برمجة تطبيقات المتجر الإلكتروني"
+        Description = "e-Commerce API System"
     });
 
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
