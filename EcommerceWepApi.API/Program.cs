@@ -15,21 +15,16 @@ using EcommerceWepApi.API.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ✅ Railway PORT
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
-
 // ========== 1. Database ==========
-// ✅ SQLite مع مسار ثابت للـ Volume على Railway
-var dbPath = Environment.GetEnvironmentVariable("DB_PATH")
-    ?? Path.Combine(Directory.GetCurrentDirectory(), "app_data");
+var useOnline = builder.Configuration.GetValue<bool>("UseOnlineDatabase");
+var connectionString = builder.Configuration.GetConnectionString(
+    useOnline ? "OnlineConnection" : "LocalConnection"
+)!;
 
-Directory.CreateDirectory(dbPath);
-
-var connectionString = builder.Configuration.GetConnectionString("LocalConnection");
+Console.WriteLine($"✅ Using database: {(useOnline ? "Online" : "Local")}");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString)); // ✅ استخدم LocalConnection من appsettings.json
+    options.UseSqlServer(connectionString));
 
 // ========== 2. Repositories & UnitOfWork ==========
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
@@ -52,7 +47,6 @@ builder.Services.AddScoped<IAdminLogService, AdminLogService>();
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 
 // ========== 5. JWT Authentication ==========
-// ✅ اقرأ من Environment Variables أولاً ثم من appsettings
 var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
     ?? builder.Configuration["JWT:Secret"]!;
 var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER")
@@ -157,17 +151,25 @@ builder.Services.AddMemoryCache();
 var app = builder.Build();
 
 // ========== ✅ Auto Migration ==========
-using (var scope = app.Services.CreateScope())
+try
 {
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.Migrate();
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.Database.Migrate();
+    }
+    Console.WriteLine("✅ Database migration completed successfully!");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ Migration failed: {ex.Message}");
 }
 
 // ========== Middleware Pipeline ==========
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// ✅ Swagger شغال دايماً (Production و Development)
+// ✅ Swagger شغال دايماً
 app.UseSwagger();
 app.UseSwaggerUI(options =>
 {
@@ -176,7 +178,6 @@ app.UseSwaggerUI(options =>
 
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
-// ✅ شيل HTTPS Redirection على Railway (Railway بيتكفل بيها)
 if (!app.Environment.IsProduction())
 {
     app.UseHttpsRedirection();
